@@ -94,64 +94,50 @@ def get_spec_html(product):
 def add_phrase_after_specs(html):
     soup = BeautifulSoup(html or "", "html.parser")
 
-    # Never add if phrase already exists anywhere in this content.
+    # Agar phrase pehle se mojood hai to dobara add na karo
     if has_phrase(html):
         return html, False, "Already present"
 
-    # Find the exact Product Specifications heading.
+    # Product Specifications heading find karo
     heading = None
-    for tag in soup.find_all(["h1","h2","h3","h4","h5","h6","p","div","strong","b"]):
+
+    for tag in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p", "div"]):
         text = " ".join(tag.get_text(" ", strip=True).split())
+
         if re.fullmatch(r"product\s+specifications\s*:?", text, re.I):
             heading = tag
             break
 
+    # Strong / bold heading fallback
     if heading is None:
-        # Handle plain text heading inside a text node.
-        for node in soup.find_all(string=re.compile(r"product\s+specifications\s*:?", re.I)):
-            heading = node
-            break
+        for tag in soup.find_all(["strong", "b"]):
+            text = " ".join(tag.get_text(" ", strip=True).split())
+
+            if re.fullmatch(r"product\s+specifications\s*:?", text, re.I):
+                heading = tag.parent if tag.parent else tag
+                break
 
     if heading is None:
         return html, False, "Product Specifications not found"
 
-    # Use a line break, not a new <p>, to prevent unwanted vertical spacing.
-    br = soup.new_tag("br")
     bold = soup.new_tag("strong")
     bold.string = TARGET_PHRASE
 
-    if getattr(heading, "name", None):
-        # Put phrase immediately after the heading element.
-        heading.insert_after(bold)
-        bold.insert_after(br)
+    br = soup.new_tag("br")
+
+    # Material wala next block find karo
+    next_block = heading.find_next_sibling(["p", "div"])
+
+    if next_block:
+        # Phrase ko Material ke same paragraph me add karo
+        next_block.insert(0, br)
+        next_block.insert(0, bold)
+
         return str(soup), True, "Added"
 
-    # Plain text node fallback.
-    parent = heading.parent
-    if parent is None:
-        return html, False, "Product Specifications not found"
-
-    raw = str(heading)
-    match = re.search(r"(product\s+specifications\s*:?)", raw, re.I)
-    if not match:
-        return html, False, "Product Specifications not found"
-
-    before = raw[:match.end()]
-    after = raw[match.end():]
-    heading.replace_with(before)
-
-    # Insert after the heading text, preserving existing content.
-    before_node = parent.find(string=before)
-    if before_node is not None:
-        before_node.insert_after(bold)
-        bold.insert_after(br)
-        if after:
-            br.insert_after(after)
-    else:
-        parent.append(bold)
-        bold.insert_after(br)
-        if after:
-            br.insert_after(after)
+    # Fallback
+    heading.append(soup.new_tag("br"))
+    heading.append(bold)
 
     return str(soup), True, "Added"
 
